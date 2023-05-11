@@ -1,0 +1,398 @@
+var counter = 0;
+var firstImage = 0;
+var secondImage = 0;
+var thirdImage = 0;
+
+window.scrollexPro = (function (window, document) {
+  return {
+    create: function (bz, config) {
+      var pageName = bz.getState("pageLabel"),
+        page = bz.Creative.getPageByName(pageName).el;
+      var screenHt = page.offsetHeight;
+      var pubWin = BZ_FORMAT.getPublisherWindow() || window.top || window;
+      var publisherPageHeight = pubWin.document.body.offsetHeight;
+      var noOfScreens = config.screenDoms.length || 0;
+      var maxOffset = (noOfScreens - 1) * screenHt;
+      var skipButton =
+        config.skipButton !== null ? getEl(config.skipButton) : "";
+      var hudDoms = config.hudDoms !== null ? config.hudDoms : [];
+      var loadingScreenDom =
+        config.loadingScreen !== null ? getEl(config.loadingScreen) : "";
+      var screenDoms =
+        config.screenDoms !== null ? getScreenDOMs(config.screenDoms) : [];
+      var enableSlider =
+        config.enableSlider !== null ? config.enableSlider : false;
+
+      var adContainer = pubWin.document.querySelector(
+        ".bz-viewability-container"
+      );
+      var adTop = adContainer.offsetTop || 0;
+      var adClipper = adContainer.firstElementChild;
+
+      var screenIndex = 0;
+      var lastIndex = screenIndex;
+
+      var scrollOffset = -1;
+      var scrollDirection = "down";
+      var lastScrollPosition = 0;
+      var slider;
+
+      function resizeDoms() {
+        resized().then(function () {
+          screenHt = page.offsetHeight;
+          maxOffset = (noOfScreens - 1) * screenHt;
+          console.log(maxOffset,'maxofst')
+          //adjustContainerHeight();
+          screenDoms.forEach(function (div) {
+            div.style.overflow = "hidden";
+            [].slice.call(div.childNodes).forEach(function (child) {
+              child.style.height = screenHt + "px";
+            });
+          });
+        });
+      }
+
+      function init() {
+        //adjustContainerHeight();
+        if (loadingScreenDom) loadingScreenDom.style.zIndex = 1000;
+        var style = document.createElement("style");
+        style.type = "text/css";
+        style.innerHTML =
+          ".bz-screen { will-change: contents; -webkit-box-shadow: 0px 10px 15px 3px rgba(0,0,0,0.25); -moz-box-shadow: 0px 10px 15px 3px rgba(0,0,0,0.25); box-shadow: 0px 10px 15px 3px rgba(0,0,0,0.25);}.slider { width: 6px; height: 100%; background-color: #e84c3d; position: absolute; right: 0px; transform: scaleY(0); -webkit-transform: scaleY(0); transform-origin: top; pointer-events: none; will-change: contents; z-index: 999;}";
+        page.appendChild(style);
+        resizeDoms();
+        creatHUD();
+        createSkipBtn();
+        createSlider();
+        addPreviewHack();
+        pubWin.addEventListener("resize", resizeDoms);
+        pubWin.addEventListener("scroll", adOnScroll);
+
+        //hide loading screen
+        if (loadingScreenDom) loadingScreenDom.style.display = "none";
+      }
+
+      function adjustContainerHeight() {
+        adContainer.style.minHeight = noOfScreens * screenHt + "px";
+        adClipper.style.minHeight = noOfScreens * screenHt + "px";
+      }
+
+      function createSkipBtn() {
+        if (!skipButton) return;
+
+        skipButton.addEventListener("click", skipAd);
+        bz.Common.css(
+          {
+            zIndex: 999,
+            "will-change": "contents",
+          },
+          skipButton
+        );
+      }
+
+      function creatHUD() {
+        var layerindex = noOfScreens + 1;
+        hudDoms.forEach(function (elname) {
+          var el = getEl(elname);
+          if (!el) return;
+          bz.Common.css(
+            {
+              zIndex: layerindex++,
+              "will-change": "contents",
+            },
+            el
+          );
+        });
+      }
+
+      function createSlider() {
+        if (!enableSlider) return;
+
+        slider = document.createElement("div");
+        slider.id = "slider";
+        slider.classList.add("slider");
+        page.appendChild(slider);
+        return slider;
+      }
+
+      function animateScale(el, val) {
+        bz.Common.css(
+          {
+            transform: "scaleY(" + val + ")",
+          },
+          el
+        );
+      }
+
+      function animateSlider(val) {
+        if (enableSlider) animateScale(slider, val);
+      }
+
+      function clamp(min, max, value) {
+        return value < min ? min : value > max ? max : value;
+      }
+
+      function adOnScroll(e) {
+        //console.log('page scrolling');
+
+        if (counter === 0) {
+          //console.log('scrolled');
+          bz.Creative.triggerAnalyticsEvent(
+            "scroll",
+            "pageScroll",
+            "Interaction",
+            {
+              eleid: "scroll",
+              elen: "Page is Scrolled",
+              elet: "HOTSPOT_V2",
+              evt: "Interaction",
+            }
+          );
+          counter++;
+        }
+        //console.log(screenIndex, 'screen Index');
+        if (screenIndex === 0) {
+          if (firstImage === 0) {
+            //console.log('firstImage  in view');
+            bz.Creative.triggerAnalyticsEvent(
+              "scroll",
+              "imageNumber" + screenIndex,
+              "Interaction",
+              {
+                eleid: "image" + screenIndex,
+                elen: "First Image",
+                elet: "IMAGE",
+                evt: "Interaction",
+              }
+            );
+          }
+          firstImage++;
+        }
+        if (screenIndex === 1) {
+          if (secondImage === 0) {
+            //console.log('second Image in view');
+            bz.Creative.triggerAnalyticsEvent(
+              "scroll",
+              "imageNumber" + screenIndex,
+              "Interaction",
+              {
+                eleid: "image" + screenIndex,
+                elen: "Second Image",
+                elet: "IMAGE",
+                evt: "Interaction",
+              }
+            );
+          }
+          secondImage++;
+        }
+        var secondImageHeight = screenDoms[1].getBoundingClientRect().height;
+        //console.log(secondImageHeight);
+        if (secondImageHeight === 0) {
+          if (thirdImage === 0) {
+            //console.log('third image in view');
+            bz.Creative.triggerAnalyticsEvent(
+              "scroll",
+              "imageNumber3",
+              "Interaction",
+              {
+                eleid: "image3",
+                elen: "Third Image",
+                elet: "IMAGE",
+                evt: "Interaction",
+              }
+            );
+          }
+          thirdImage++;
+        }
+
+        scrollOffset = pubWin.scrollY - adTop;
+        console.log(scrollOffset,'scrlofst')
+        if (pubWin.scrollY > lastScrollPosition) {
+          scrollDirection = "down";
+        } else {
+          scrollDirection = "up";
+        }
+        lastScrollPosition = pubWin.scrollY;
+        /*
+                if (scrollOffset <= 0 || scrollOffset >= maxOffset) {
+                    screenDoms[screenIndex].style.height = screenIndex ? "0px" : screenHt + "px";
+                    return;
+                }
+                screenIndex = Math.min(Math.floor(scrollOffset / screenHt), noOfScreens - 2);
+                if (lastIndex !== screenIndex) {
+                    screenDoms[screenIndex].style.visibility = "visible";
+                    if (lastIndex < screenIndex) {
+                        scrollDirection = "down";
+                        screenDoms[lastIndex].style.visibility = "hidden";
+                        screenDoms[lastIndex].style.height = "0px";
+                    } else {
+                        scrollDirection = "up";
+                        screenDoms[lastIndex].style.visibility = "visible";
+                        screenDoms[lastIndex].style.height = screenHt + "px";
+                    }
+                    lastIndex = screenIndex;
+                }
+                */
+        // screenDoms[screenIndex].style.height = (screenHt - (scrollOffset - screenIndex * screenHt)) + "px";
+
+        if (scrollOffset < publisherPageHeight * 0.01) {
+          //console.log("Less than publisherPageHeight * 0.1");
+          screenDoms[0].style.height = screenHt + "px";
+          screenDoms[1].style.height = screenHt + "px";
+          //screenDoms[2].style.height = screenHt + "px";
+        } else if (
+          scrollOffset >= publisherPageHeight * 0.01 &&
+          scrollOffset < publisherPageHeight / 3
+        ) {
+          //console.log("Greater than publisherPageHeight * 0.01");
+          screenDoms[0].style.height =
+            clamp(
+              0,
+              screenHt,
+              /* Multiply this factor this for slowing down the first screen scroll 0.1 * */ (screenHt /
+                (publisherPageHeight * 0.01 - screenHt / 3)) *
+                (scrollOffset - publisherPageHeight / 3)
+            ) + "px";
+          screenDoms[1].style.height = screenHt + "px";
+          //screenDoms[2].style.height = screenHt + "px";
+        } else if (
+          scrollOffset >= publisherPageHeight / 3 &&
+          scrollOffset < (2 * publisherPageHeight) / 3
+        ) {
+          //console.log("Less than 2 * publisherPageHeight / 3");
+          screenDoms[0].style.height = 0;
+          screenDoms[1].style.height =
+            clamp(
+              0,
+              screenHt,
+              2 * screenHt -
+                scrollOffset * ((3 * screenHt) / publisherPageHeight)
+            ) + "px";
+          //screenDoms[2].style.height = screenHt + "px";
+        } else if (scrollOffset >= (2 * screenHt) / 3) {
+          screenDoms[0].style.height = 0;
+          screenDoms[1].style.height = 0;
+          //screenDoms[2].style.height = screenHt + "px";
+        }
+
+        animateSlider((scrollOffset / maxOffset).toFixed(3));
+      }
+
+      function skipAd() {
+        var offset =
+          scrollDirection === "down"
+            ? adContainer.offsetTop + adContainer.offsetHeight
+            : adContainer.offsetTop - screenHt;
+
+        switch (scrollDirection) {
+          case "up":
+            screenIndex = 0;
+            screenDoms.slice(0, -1).forEach(function (screen) {
+              screen.style.height = screenHt + "px";
+            });
+            break;
+          case "down":
+            screenIndex = noOfScreens - 2;
+            screenDoms.slice(0, -1).forEach(function (screen) {
+              screen.style.height = "0px";
+            });
+            break;
+          default:
+            break;
+        }
+        pubWin.scrollTo(0, offset);
+        //reset slider to either 0 or 1 scale depeding upon direction
+        animateSlider(Math.min(1, screenIndex));
+        screenDoms.forEach(function (screen) {
+          screen.style.visibility = "visible";
+        });
+      }
+
+      function addPreviewHack() {
+        var isPreview = BZ_FORMAT.isPreview;
+        if (isPreview && typeof isPreview === "function" && isPreview()) {
+          var adCell = pubWin.document.querySelector(".cell__adContainer");
+          if (adCell) adCell.style.height = "auto";
+        }
+      }
+
+      init();
+
+      //Utility methods
+      function createDiv() {
+        var bz_div = document.createElement("div");
+        bz.Common.css(
+          {
+            left: "0%",
+            margin: "0px",
+            opacity: 1,
+            padding: "0px",
+            position: "absolute",
+            top: "0%",
+            width: "100%",
+          },
+          bz_div
+        );
+        return bz_div;
+      }
+
+      function getEl(name) {
+        return !!name ? bz.Creative.getElementByName(name).el : null;
+      }
+
+      function getScreenDOMs(screenDomConfig) {
+        return screenDomConfig.map(function (config, index) {
+          return makeScreen(config, index);
+        });
+      }
+
+      function makeScreen(screenElements, index) {
+        var screenContainer = createDiv();
+        screenContainer.id = "screen-" + index;
+        screenContainer.classList.add("bz-screen");
+        screenContainer.style.height = "100%";
+        screenContainer.style.zIndex = noOfScreens - index;
+
+        var screenClipper = createDiv();
+        screenClipper.id = "screenClipper-" + index;
+        screenClipper.style.height = screenHt + "px";
+
+        screenElements.forEach(function (elName) {
+          var el = getEl(elName);
+          if (!el) return;
+          bz.Creative.moveElementById(el.id, screenClipper);
+        });
+        screenContainer.appendChild(screenClipper);
+        page.appendChild(screenContainer);
+        return screenContainer;
+      }
+
+      function resized() {
+        var timeout = 120;
+        return new window.Promise(function (resolve) {
+          var go = function (i, height0) {
+            pubWin.innerHeight !== height0 || i >= timeout
+              ? resolve()
+              : window.requestAnimationFrame(function () {
+                  go(i + 1, height0);
+                });
+          };
+          go(0, pubWin.innerHeight);
+        });
+      }
+    },
+  };
+})(window, document);
+
+window.scrollexPro.create(bz, {
+  screenDoms: [
+    ["BG", "LHS", "RHS"],
+    ["Back", "Left", "Right"],
+    ["Bg 3", "Footerrev3", "LHS-txt", "rock"],
+  ],
+  skipButton: "",
+  loadingScreen: "loading",
+  //hudDoms: ["Header", "Vanquish_S_Ultimate", "logo", "Footer"],
+  hudDoms: ["Header_C"],
+  enableSlider: false,
+});
